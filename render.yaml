@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: fatbox
+    env: go
+    plan: free
+    buildCommand: go build -o fatbox
+    startCommand: ./fatbox
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 10069
