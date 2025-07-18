@@ -3,7 +3,8 @@
 A server for uploading to Catbox, litterbox and pomf.lain.la, with resume capability and upload target switching.
 
 # Requirements 
-Add this secret to your environment
+Add this secret to your environment or rename the .env.example to .env and provide your postgres database url
+
 ```
 DATABASE_URI="your_postgres_db_url" 
 ```

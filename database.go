@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+    "log"
 	"time"
+	"github.com/joho/godotenv" 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -14,6 +16,12 @@ type FileHashRecord struct {
 	Hash      string
 	CatboxURL sql.NullString
 	PomfURL   sql.NullString
+}
+
+func init() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using system environment variables.")
+	}
 }
 
 func InitDB() error {
