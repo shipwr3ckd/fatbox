@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
 	"github.com/google/uuid"
 )
 
@@ -194,7 +195,7 @@ func finishHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func directHandler(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(50 << 20); err != nil { // 64 MB buffer
+	if err := r.ParseMultipartForm(50 << 20); err != nil {
 		http.Error(w, "Invalid form: "+err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -389,12 +390,60 @@ func formatBytes(bytes int64) string {
 	}
 }
 
+func createProxyHandler(targetHost, stripPrefix string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		filePath := strings.TrimPrefix(r.URL.Path, stripPrefix)
+		if filePath == "" {
+			http.Error(w, "File path is missing.", http.StatusBadRequest)
+			return
+		}
+
+		targetURL := targetHost + filePath
+		log.Printf("Proxying %s to %s", r.URL.Path, targetURL)
+
+		req, err := http.NewRequest(http.MethodGet, targetURL, nil)
+		if err != nil {
+			log.Printf("❌ Proxy error for %s (creating request): %v", targetURL, err)
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		if rangeHeader := r.Header.Get("Range"); rangeHeader != "" {
+			req.Header.Set("Range", rangeHeader)
+		}
+
+		client := &http.Client{Timeout: 5 * time.Minute}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("❌ Proxy error for %s (executing request): %v", targetURL, err)
+			http.Error(w, "Bad Gateway", http.StatusBadGateway)
+			return
+		}
+		defer resp.Body.Close()
+
+		for key, values := range resp.Header {
+			w.Header()[key] = values
+		}
+
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body)
+	}
+}
+
 func main() {
 	defer CloseDB()
 	http.HandleFunc("/chunk", chunkHandler)
 	http.HandleFunc("/finish", finishHandler)
 	http.HandleFunc("/direct", directHandler)
 	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	http.HandleFunc("/catbox/", createProxyHandler("https://files.catbox.moe/", "/catbox/"))
+	http.HandleFunc("/litterbox/", createProxyHandler("https://litter.catbox.moe/", "/litterbox/"))
+	http.HandleFunc("/pomf/", createProxyHandler("https://pomf.lain.la/", "/pomf/"))
 	http.HandleFunc("/", healthHandler)
 	log.Println("✅ Server listening on http://localhost:3000")
 	if err := http.ListenAndServe(":3000", nil); err != nil {
